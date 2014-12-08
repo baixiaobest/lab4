@@ -44,6 +44,19 @@ downloading peer’s disk.
 So I limit the maximum number of bytes can be transferred to 100 MB in task_upload function.
 So a very big file transfer like /dev/random can be prevented.
 
+2)
+A malicious peer can attack another seeder peer by lying to tracker, say, telling 
+tracker to get cat3.jpg, when actually it is not requesting cat3.jpg. Then tracker 
+will give malicious peer a list of IP address, so mit can ask for file
+other than cat3.jpg from these IP address.For example, it can ask for ‘/etc/passwd’.
+And seeder peer will, without realizing the danger, send the file to attacker.
+To solve it, peer needs to check if requesting filename contains ’/’, so that files
+other than working directory won’t be fetched. A checking function is implemented
+in task_upload().
+
+3)
+Data from a popular tracker could contains too many IP
+
 # EXERCISE 3: Describe the attacks you implemented for "evil mode".  Why
 #    are they attacks?  (~3-10 sentences each)
 

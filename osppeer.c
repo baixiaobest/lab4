@@ -659,7 +659,7 @@ static void task_upload(task_t *t)
 	}
 	t->head = t->tail = 0;
     ////////////////////////////////////////////////////////////////////////////////
-    //Exercise 2B here!!! limit file to current directory
+    //Exercise 2B here!!! limit file upload to current directory
     ////////////////////////////////////////////////////////////////////////////////
     int i = 0;
     for (; i<FILENAMESIZ; i++) {
@@ -667,7 +667,7 @@ static void task_upload(task_t *t)
             break;
         }else if(t->filename[i]=='/')
         {
-            error("Damn! that peer is attacking you!");
+            error("Damn! that peer is attacking you! %s", t->filename);
             goto exit;
         }
     }
