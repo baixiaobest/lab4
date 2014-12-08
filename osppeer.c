@@ -27,7 +27,7 @@ int evil_mode;			// nonzero iff this peer should behave badly
 
 static struct in_addr listen_addr;	// Define listening endpoint
 static int listen_port;
-
+#define MAXUPLOADSIZE 100000000 //limit maximum file size to 100 MB
 
 /*****************************************************************************
  * TASK STRUCTURE
@@ -457,7 +457,8 @@ static peer_t *parse_peer(const char *s, size_t len)
 task_t *start_download(task_t *tracker_task, const char *filename)
 {
 	char *s1, *s2;
-	task_t *t = NULL;
+	task_t
+    *t = NULL;
 	peer_t *p;
 	size_t messagepos;
 	assert(tracker_task->type == TASK_TRACKER);
@@ -643,7 +644,14 @@ static void task_upload(task_t *t)
 	}
 
 	assert(t->head == 0);
-	if (osp2p_snscanf(t->buf, t->tail, "GET %s OSP2P\n", t->filename) < 0) {
+    ////////////////////////////////////////////////////////////////////////////////
+    //Exercise 2A is here!!!
+    ////////////////////////////////////////////////////////////////////////////////
+    if (t->tail >= sizeof("GET  OSP2P"+FILENAMESIZ)) {
+        error("A peer is trying to overrun your filename buffer\n");
+        goto exit;
+    }
+	if (osp2p_snscanf(t->buf, t->tail, "GET %s OSP2P\n", t->filename) < 0) { //possible filename overrun
 		error("* Odd request %.*s\n", t->tail, t->buf);
 		goto exit;
 	}
@@ -657,6 +665,7 @@ static void task_upload(task_t *t)
 
 	message("* Transferring file %s\n", t->filename);
 	// Now, read file from disk and write it to the requesting peer.
+    int uploadedBufferSize=0;
 	while (1) {
 		int ret = write_from_taskbuf(t->peer_fd, t);
 		if (ret == TBUF_ERROR) {
@@ -671,6 +680,15 @@ static void task_upload(task_t *t)
 		} else if (ret == TBUF_END && t->head == t->tail)
 			/* End of file */
 			break;
+        
+        /////////////////////////////////////////////////////////////////
+        //Exercise 2B is here!!! Look at meeeee!
+        /////////////////////////////////////////////////////////////////
+        uploadedBufferSize += TASKBUFSIZ;
+        if (uploadedBufferSize>=MAXUPLOADSIZE) {
+            error("You are trying to fill up the Disk\n");
+            goto exit;
+        }
 	}
 
 	message("* Upload of %s complete\n", t->filename);
@@ -760,12 +778,30 @@ int main(int argc, char *argv[])
 
 	// First, download files named on command line.
 	for (; argc > 1; argc--, argv++)
-		if ((t = start_download(tracker_task, argv[1])))
-			task_download(t, tracker_task);
+        if ((t = start_download(tracker_task, argv[1]))){
+            ////////////////////////////////////////////////////////////
+            //Exercise 1 here!!! Look at here! // parallel download
+            ////////////////////////////////////////////////////////////
+            pid_t pid = fork();
+            if (pid==0) {
+                task_download(t, tracker_task);
+                exit(0);
+            }else if(pid == -1)
+                error("Erorr forking during download\n");
+        }
 
 	// Then accept connections from other peers and upload files to them!
-	while ((t = task_listen(listen_task)))
+    while ((t = task_listen(listen_task))){
+        //////////////////////////////////////////////////////////////////
+        //Exercise 1 here! parallel upload
+        //////////////////////////////////////////////////////////////////
+        pid_t pid = fork();
+        if (pid==0) {
 		task_upload(t);
+        }else if(pid==-1){
+            erorr("Error forking during upload\n");
+        }
+    }
 
 	return 0;
 }

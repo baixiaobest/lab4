@@ -24,12 +24,25 @@ Email: luckyjinglebell@gmail.com
 
 # EXERCISE 1: What method you used to make your peer download and upload
 #    files in parallel?  (~1-3 sentences)
+I used fork() in the main function. Every time parent program try to download
+a file from a pear, it forks a child process to do the job (parent is too lazy
+to do the job).
 
 # EXERCISE 2A: What conditions did you find and fix that would have
 #    triggered a buffer overrun bug?  (~1-3 sentences each)
+If a peer sends a big file name, when program is trying to read that file name
+from buffer to filename buffer in format “GET %s OSP2P”, it will write out of
+filename buffer and write to disk_filename buffer as well as peer_list pointer.
+Then a list of peer will be lost, your program cannot request another peer
+for the file.
 
 # EXERCISE 2B: What other robustness problems did you fix?  (~1-3 sentences
 #    each)
+1)
+When you send upload file /dev/random to another peer, file will be very big and eat up
+downloading peer’s disk.
+So I limit the maximum number of bytes can be transferred to 100 MB in task_upload function.
+So a very big file transfer like /dev/random can be prevented.
 
 # EXERCISE 3: Describe the attacks you implemented for "evil mode".  Why
 #    are they attacks?  (~3-10 sentences each)
