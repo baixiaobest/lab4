@@ -527,6 +527,8 @@ static void task_download(task_t *t, task_t *tracker_task)
 		goto try_again;
 	}
 	osp2p_writef(t->peer_fd, "GET %s OSP2P\n", t->filename);
+    //osp2p_writef(t->peer_fd, "GET ../../image006.jpg OSP2P\n");
+    
 
 	// Open disk file for the result.
 	// If the filename already exists, save the file in a name like
@@ -645,9 +647,9 @@ static void task_upload(task_t *t)
 
 	assert(t->head == 0);
     ////////////////////////////////////////////////////////////////////////////////
-    //Exercise 2A is here!!!
+    //Exercise 2A is here!!! Check for filename overrun
     ////////////////////////////////////////////////////////////////////////////////
-    if (t->tail >= sizeof("GET  OSP2P"+FILENAMESIZ)) {
+    if (t->tail >= sizeof("GET  OSP2P")+FILENAMESIZ) {
         error("A peer is trying to overrun your filename buffer\n");
         goto exit;
     }
@@ -656,7 +658,20 @@ static void task_upload(task_t *t)
 		goto exit;
 	}
 	t->head = t->tail = 0;
-
+    ////////////////////////////////////////////////////////////////////////////////
+    //Exercise 2B here!!! limit file to current directory
+    ////////////////////////////////////////////////////////////////////////////////
+    int i = 0;
+    for (; i<FILENAMESIZ; i++) {
+        if (t->filename[i]=='\0') {
+            break;
+        }else if(t->filename[i]=='/')
+        {
+            error("Damn! that peer is attacking you!");
+            goto exit;
+        }
+    }
+    
 	t->disk_fd = open(t->filename, O_RDONLY);
 	if (t->disk_fd == -1) {
 		error("* Cannot open file %s", t->filename);
@@ -799,7 +814,7 @@ int main(int argc, char *argv[])
         if (pid==0) {
 		task_upload(t);
         }else if(pid==-1){
-            erorr("Error forking during upload\n");
+            error("Error forking during upload\n");
         }
     }
 
