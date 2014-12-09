@@ -42,24 +42,43 @@ for the file.
 When you send upload file /dev/random to another peer, file will be very big and eat up
 downloading peer’s disk.
 So I limit the maximum number of bytes can be transferred to 100 MB in task_upload function.
-So a very big file transfer like /dev/random can be prevented. This programs is tested
-by setting up another peer.
+So a very big file transfer like /dev/random can be prevented. This feature was tested
+by setting up another peer on my partner’s Mac.
 
 2)
 A malicious peer can attack another seeder peer by lying to tracker, say, telling 
 tracker to get cat3.jpg, when actually it is not requesting cat3.jpg. Then tracker 
-will give malicious peer a list of IP address, so mit can ask for file
+will give malicious peer a list of IP address, so attacker can ask for file
 other than cat3.jpg from these IP address.For example, it can ask for ‘/etc/passwd’.
 And seeder peer will, without realizing the danger, send the file to attacker.
 To solve it, peer needs to check if requesting filename contains ’/’, so that files
 other than working directory won’t be fetched. A checking function is implemented
-in task_upload(). Program robustness against this attack was tested.
+in task_upload(). Program robustness against this attack was tested on a setup
+attack from my Mac to my partner’s Mac.
 
 3)
-Data from a popular tracker could contains too many IP
+Data from a popular tracker could contains too many IP. When the buffer fills up
+by peers IP, I parse them into peer list while filling the buffer. Then clear
+the buffer for new incoming data.
 
 # EXERCISE 3: Describe the attacks you implemented for "evil mode".  Why
 #    are they attacks?  (~3-10 sentences each)
+1) 
+File name overrun attack. It overflows the filename of other peers, so other
+peers program will crash if they are unable to detect it. It is tested on
+my partner Mac, and overrun is detected.
+
+2)
+Denial of service. In mode 2, I keep opening new connection with all the peers 
+within the P2P network. So other peer will thing I am going to download the
+file and may fork a process to manage my requests. But too many requests in a
+given time will fill up peer’s process table and paralyze the P2P network.
+This is tested against my partner’s Mac and successfully crashed it.
+
+3)
+Passive attack, attack on request.
+I transfer /dev/random to any request and thus random data can fill up downloader’s
+disk. This attack is also tested.
 
 # Extra credit problems
 #Extra credit problem: none
