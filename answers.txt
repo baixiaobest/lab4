@@ -42,7 +42,8 @@ for the file.
 When you send upload file /dev/random to another peer, file will be very big and eat up
 downloading peer’s disk.
 So I limit the maximum number of bytes can be transferred to 100 MB in task_upload function.
-So a very big file transfer like /dev/random can be prevented.
+So a very big file transfer like /dev/random can be prevented. This programs is tested
+by setting up another peer.
 
 2)
 A malicious peer can attack another seeder peer by lying to tracker, say, telling 
@@ -52,7 +53,7 @@ other than cat3.jpg from these IP address.For example, it can ask for ‘/etc/pa
 And seeder peer will, without realizing the danger, send the file to attacker.
 To solve it, peer needs to check if requesting filename contains ’/’, so that files
 other than working directory won’t be fetched. A checking function is implemented
-in task_upload().
+in task_upload(). Program robustness against this attack was tested.
 
 3)
 Data from a popular tracker could contains too many IP

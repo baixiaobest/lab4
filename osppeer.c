@@ -311,6 +311,11 @@ static size_t read_tracker_response(task_t *t)
 		int ret = read_to_taskbuf(t->peer_fd, t);
 		if (ret == TBUF_ERROR)
 			die("tracker read error");
+        /////////////////////////////////////////////////////////////////////////
+        //Exercise 2B here!!! If buffer is fill up by popular tracker, don't die!
+        /////////////////////////////////////////////////////////////////////////
+        else if(ret == TBUF_END && t->tail == TASKBUFSIZ)
+            return TASKBUFSIZ;
 		else if (ret == TBUF_END)
 			die("tracker connection closed prematurely!\n");
 	}
@@ -462,34 +467,44 @@ task_t *start_download(task_t *tracker_task, const char *filename)
 	peer_t *p;
 	size_t messagepos;
 	assert(tracker_task->type == TASK_TRACKER);
+    unsigned remainingData;
 
 	message("* Finding peers for '%s'\n", filename);
 
 	osp2p_writef(tracker_task->peer_fd, "WANT %s\n", filename);
-	messagepos = read_tracker_response(tracker_task);
-	if (tracker_task->buf[messagepos] != '2') {
-		error("* Tracker error message while requesting '%s':\n%s",
-		      filename, &tracker_task->buf[messagepos]);
-		goto exit;
-	}
+    do{
+        messagepos = read_tracker_response(tracker_task);
+        if (tracker_task->buf[messagepos] != '2') {
+            error("* Tracker error message while requesting '%s':\n%s",
+                  filename, &tracker_task->buf[messagepos]);
+            goto exit;
+        }
 
-	if (!(t = task_new(TASK_DOWNLOAD))) {
-		error("* Error while allocating task");
-		goto exit;
-	}
-	strcpy(t->filename, filename);
+        if (!(t = task_new(TASK_DOWNLOAD))) {
+            error("* Error while allocating task");
+            goto exit;
+        }
+        strcpy(t->filename, filename);
 
-	// add peers
-	s1 = tracker_task->buf;
-	while ((s2 = memchr(s1, '\n', (tracker_task->buf + messagepos) - s1))) {
-		if (!(p = parse_peer(s1, s2 - s1)))
-			die("osptracker responded to WANT command with unexpected format!\n");
-		p->next = t->peer_list;
-		t->peer_list = p;
-		s1 = s2 + 1;
-	}
-	if (s1 != tracker_task->buf + messagepos)
-		die("osptracker's response to WANT has unexpected format!\n");
+        // add peers
+        s1 = tracker_task->buf;
+        while ((s2 = memchr(s1, '\n', (tracker_task->buf + messagepos) - s1))) {
+            if (!(p = parse_peer(s1, s2 - s1)))
+                die("osptracker responded to WANT command with unexpected format!\n");
+            p->next = t->peer_list;
+            t->peer_list = p;
+            s1 = s2 + 1;
+        }
+        if (s1 != tracker_task->buf + messagepos)
+            die("osptracker's response to WANT has unexpected format!\n");
+        //////////////////////////////////////////////////////////////////////////////////
+        //Exercise 2B is here!!! It deals with buffer flooding by popular tracker
+        //////////////////////////////////////////////////////////////////////////////////
+        if (messagepos==TASKBUFSIZ) {
+            remainingData = TASKBUFSIZ-(s1-tracker_task->buf);
+            memmove(tracker_task->buf, s1, remainingData);
+        }
+    }while (messagepos!=TASKBUFSIZ);
 
  exit:
 	return t;
