@@ -41,7 +41,7 @@ for the file.
 1)
 When you send upload file /dev/random to another peer, file will be very big and eat up
 downloading peer’s disk.
-So I limit the maximum number of bytes can be transferred to 100 MB in task_upload function.
+So I limit the maximum number of bytes can be transferred to 100 MB in task_upload function and also task_download function.
 So a very big file transfer like /dev/random can be prevented. This feature was tested
 by setting up another peer on my partner’s Mac.
 
