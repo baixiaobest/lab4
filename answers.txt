@@ -24,7 +24,7 @@ Email: luckyjinglebell@gmail.com
 
 # EXERCISE 1: What method you used to make your peer download and upload
 #    files in parallel?  (~1-3 sentences)
-I used fork() in the main function. Every time parent program try to download
+We used fork() in the main function. Every time parent program try to download
 a file from a pear, it forks a child process to do the job (parent is too lazy
 to do the job).
 
@@ -41,7 +41,7 @@ for the file.
 1)
 When you send upload file /dev/random to another peer, file will be very big and eat up
 downloading peer’s disk.
-So I limit the maximum number of bytes can be transferred to 100 MB in task_upload function and also task_download function.
+So we limit the maximum number of bytes can be transferred to 100 MB in task_upload function and also task_download function.
 So a very big file transfer like /dev/random can be prevented. This feature was tested
 by setting up another peer on my partner’s Mac.
 
@@ -58,7 +58,7 @@ attack from my Mac to my partner’s Mac.
 
 3)
 Data from a popular tracker could contains too many IP. When the buffer fills up
-by peers IP, I parse them into peer list while filling the buffer. Then clear
+by peers IP, we parse them into peer list while filling the buffer. Then clear
 the buffer for new incoming data.
 
 # EXERCISE 3: Describe the attacks you implemented for "evil mode".  Why
@@ -69,15 +69,15 @@ peers program will crash if they are unable to detect it. It is tested on
 my partner Mac, and overrun is detected.
 
 2)
-Denial of service. In mode 2, I keep opening new connection with all the peers 
-within the P2P network. So other peer will thing I am going to download the
+Denial of service. In mode 2, we keep opening new connection with all the peers 
+within the P2P network. So other peer will thing we are going to download the
 file and may fork a process to manage my requests. But too many requests in a
 given time will fill up peer’s process table and paralyze the P2P network.
 This is tested against my partner’s Mac and successfully crashed it.
 
 3)
 Passive attack, attack on request.
-I transfer /dev/random to any request and thus random data can fill up downloader’s
+We transfer /dev/random to any request and thus random data can fill up downloader’s
 disk. This attack is also tested.
 
 # Extra credit problems
